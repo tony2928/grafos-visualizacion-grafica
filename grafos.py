@@ -380,6 +380,20 @@ class App:
             bg="#16a085",
             fg="white",
         ).pack(fill=tk.X, pady=3)
+        tk.Button(
+            self.control_frame,
+            text="Breadth-First (BFS)",
+            command=self.run_bfs,
+            bg="#2980b9",
+            fg="white",
+        ).pack(fill=tk.X, pady=3)
+        tk.Button(
+            self.control_frame,
+            text="Depth-First (DFS)",
+            command=self.run_dfs,
+            bg="#2980b9",
+            fg="white",
+        ).pack(fill=tk.X, pady=3)
 
         tk.Frame(self.control_frame, height=2, bd=1, relief=tk.SUNKEN).pack(
             fill=tk.X, pady=10
@@ -706,6 +720,12 @@ class App:
             return sorted(self.graph.nodes.keys(), key=lambda n: int(n))
         except ValueError:
             return sorted(self.graph.nodes.keys())
+
+    def get_sorted_neighbors(self, neighbors):
+        try:
+            return sorted(neighbors, key=lambda item: int(item[0]))
+        except ValueError:
+            return sorted(neighbors, key=lambda item: item[0])
 
     def build_adjacency(self, undirected=False):
         adjacency = {n: [] for n in self.graph.nodes}
@@ -1352,6 +1372,176 @@ class App:
                 "output": "\n".join(output_lines),
             }
         )
+        self.load_steps(steps)
+
+    def run_bfs(self):
+        if not self.graph.nodes:
+            messagebox.showerror("Error", "No hay nodos en el grafo.")
+            return
+
+        start = self.start_entry.get().strip()
+        end = self.end_entry.get().strip()
+
+        if not start:
+            messagebox.showerror("Error", "Debe indicar el nodo inicio.")
+            return
+        if start not in self.graph.nodes:
+            messagebox.showerror("Error", "El nodo inicio no existe.")
+            return
+        if end and end not in self.graph.nodes:
+            messagebox.showerror("Error", "El nodo destino no existe.")
+            return
+
+        adjacency = self.build_adjacency(undirected=False)
+        visited = set()
+        queue = [start]
+        order = []
+
+        steps = [
+            {
+                "desc": f"Encolar nodo inicio {start}",
+                "active_nodes": {start},
+                "visited_nodes": set(),
+            }
+        ]
+
+        found = False
+        while queue:
+            current = queue.pop(0)
+            if current in visited:
+                continue
+
+            visited.add(current)
+            order.append(current)
+            steps.append(
+                {
+                    "desc": f"Visitar nodo {current}",
+                    "active_nodes": {current},
+                    "visited_nodes": set(visited),
+                }
+            )
+
+            if end and current == end:
+                found = True
+                break
+
+            neighbors = self.get_sorted_neighbors(adjacency.get(current, []))
+            for neighbor, _weight in neighbors:
+                if neighbor in visited:
+                    continue
+                steps.append(
+                    {
+                        "desc": f"Explorar arista {current}->{neighbor}",
+                        "active_nodes": {current, neighbor},
+                        "visited_nodes": set(visited),
+                        "active_edges": {self.edge_for_draw(current, neighbor)},
+                    }
+                )
+                queue.append(neighbor)
+
+        output_lines = ["Breadth-First (BFS)", "", "Orden de visita:"]
+        output_lines.append(" -> ".join(order))
+        if end:
+            output_lines.append("")
+            output_lines.append(
+                f"Destino {end}: " + ("ENCONTRADO" if found else "NO ENCONTRADO")
+            )
+
+        result_nodes = {end} if end and found else set()
+        steps.append(
+            {
+                "desc": "Resultado final de BFS",
+                "visited_nodes": set(visited),
+                "result_nodes": result_nodes,
+                "output": "\n".join(output_lines),
+            }
+        )
+
+        self.load_steps(steps)
+
+    def run_dfs(self):
+        if not self.graph.nodes:
+            messagebox.showerror("Error", "No hay nodos en el grafo.")
+            return
+
+        start = self.start_entry.get().strip()
+        end = self.end_entry.get().strip()
+
+        if not start:
+            messagebox.showerror("Error", "Debe indicar el nodo inicio.")
+            return
+        if start not in self.graph.nodes:
+            messagebox.showerror("Error", "El nodo inicio no existe.")
+            return
+        if end and end not in self.graph.nodes:
+            messagebox.showerror("Error", "El nodo destino no existe.")
+            return
+
+        adjacency = self.build_adjacency(undirected=False)
+        visited = set()
+        stack = [start]
+        order = []
+
+        steps = [
+            {
+                "desc": f"Apilar nodo inicio {start}",
+                "active_nodes": {start},
+                "visited_nodes": set(),
+            }
+        ]
+
+        found = False
+        while stack:
+            current = stack.pop()
+            if current in visited:
+                continue
+
+            visited.add(current)
+            order.append(current)
+            steps.append(
+                {
+                    "desc": f"Visitar nodo {current}",
+                    "active_nodes": {current},
+                    "visited_nodes": set(visited),
+                }
+            )
+
+            if end and current == end:
+                found = True
+                break
+
+            neighbors = self.get_sorted_neighbors(adjacency.get(current, []))
+            for neighbor, _weight in reversed(neighbors):
+                if neighbor in visited:
+                    continue
+                steps.append(
+                    {
+                        "desc": f"Explorar arista {current}->{neighbor}",
+                        "active_nodes": {current, neighbor},
+                        "visited_nodes": set(visited),
+                        "active_edges": {self.edge_for_draw(current, neighbor)},
+                    }
+                )
+                stack.append(neighbor)
+
+        output_lines = ["Depth-First (DFS)", "", "Orden de visita:"]
+        output_lines.append(" -> ".join(order))
+        if end:
+            output_lines.append("")
+            output_lines.append(
+                f"Destino {end}: " + ("ENCONTRADO" if found else "NO ENCONTRADO")
+            )
+
+        result_nodes = {end} if end and found else set()
+        steps.append(
+            {
+                "desc": "Resultado final de DFS",
+                "visited_nodes": set(visited),
+                "result_nodes": result_nodes,
+                "output": "\n".join(output_lines),
+            }
+        )
+
         self.load_steps(steps)
 
     # =========================
