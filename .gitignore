@@ -14,7 +14,7 @@ ENV/
 
 # PyInstaller
 build/
-dist/
+#dist/
 *.spec
 
 # OS files
