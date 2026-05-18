@@ -28,6 +28,17 @@ class Graph:
         self.nodes.clear()
         self.edges.clear()
 
+    def delete_node(self, node):
+        if node not in self.nodes:
+            return "missing"
+        del self.nodes[node]
+        self.edges = {
+            (node1, node2): weight
+            for (node1, node2), weight in self.edges.items()
+            if node1 != node and node2 != node
+        }
+        return "success"
+
 
 # ======================================
 # CLASE VISUALIZADOR (CANVAS)
@@ -46,6 +57,7 @@ class GraphVisualizer:
         active_edges=None,
         selected_edges=None,
         pointers=None,
+        result_nodes=None,
     ):
         self.canvas.delete("all")
 
@@ -54,6 +66,7 @@ class GraphVisualizer:
         active_edges = active_edges or set()
         selected_edges = selected_edges or set()
         pointers = pointers or {}
+        result_nodes = result_nodes or set()
 
         # Dibujar Aristas (Flechas)
         for (node1, node2), weight in self.graph.edges.items():
@@ -116,6 +129,9 @@ class GraphVisualizer:
             if node in active_nodes:
                 fill_color = "#f1c40f"
                 outline_color = "#f39c12"
+            if node in result_nodes:
+                fill_color = "#9b59b6"
+                outline_color = "#8e44ad"
 
             self.canvas.create_oval(
                 x - r,
@@ -156,9 +172,38 @@ class App:
 
         self.graph = Graph()
 
-        # Contenedor Izquierdo (Controles)
-        self.control_frame = tk.Frame(root, width=250, bg="#f0f0f0", padx=10, pady=10)
-        self.control_frame.pack(side=tk.LEFT, fill=tk.Y)
+        # Contenedor Izquierdo (Controles con desplazamiento)
+        self.control_container = tk.Frame(root, width=250, bg="#f0f0f0")
+        self.control_container.pack(side=tk.LEFT, fill=tk.Y)
+
+        self.control_canvas = tk.Canvas(
+            self.control_container, bg="#f0f0f0", highlightthickness=0
+        )
+        self.control_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.control_scrollbar = tk.Scrollbar(
+            self.control_container,
+            orient=tk.VERTICAL,
+            command=self.control_canvas.yview,
+        )
+        self.control_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.control_canvas.configure(yscrollcommand=self.control_scrollbar.set)
+
+        self.control_frame = tk.Frame(
+            self.control_canvas, width=250, bg="#f0f0f0", padx=10, pady=10
+        )
+        self.control_window = self.control_canvas.create_window(
+            (0, 0), window=self.control_frame, anchor="nw"
+        )
+
+        self.control_frame.bind("<Configure>", self.on_control_configure)
+        self.control_canvas.bind("<Configure>", self.on_control_canvas_configure)
+        self.control_canvas.bind_all("<MouseWheel>", self.on_mousewheel)
+
+        # Panel derecho (Eliminar nodo)
+        self.right_frame = tk.Frame(root, width=160, bg="#f7f7f7", padx=10, pady=10)
+        self.right_frame.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Canvas (Área de dibujo)
         self.canvas = tk.Canvas(root, bg="white")
@@ -227,6 +272,14 @@ class App:
             text="Agregar Nodo",
             command=self.add_node,
             bg="#2ecc71",
+            fg="white",
+        ).pack(fill=tk.X, pady=5)
+
+        tk.Button(
+            self.control_frame,
+            text="Eliminar Nodo",
+            command=self.delete_node,
+            bg="#c0392b",
             fg="white",
         ).pack(fill=tk.X, pady=5)
 
@@ -407,6 +460,26 @@ class App:
             fg="white",
         ).pack(fill=tk.X, pady=5)
 
+        # --- PANEL DERECHO ---
+        tk.Label(
+            self.right_frame,
+            text="ELIMINAR",
+            font=("Arial", 10, "bold"),
+            bg="#f7f7f7",
+        ).pack(pady=5)
+
+        tk.Label(self.right_frame, text="Nodo:", bg="#f7f7f7").pack(anchor="w")
+        self.delete_entry = tk.Entry(self.right_frame)
+        self.delete_entry.pack(fill=tk.X, pady=2)
+
+        tk.Button(
+            self.right_frame,
+            text="Eliminar",
+            command=self.delete_node,
+            bg="#c0392b",
+            fg="white",
+        ).pack(fill=tk.X, pady=5)
+
     def toggle_position_entries(self):
         """Activa o desactiva los campos X e Y según el modo seleccionado."""
         if self.placement_mode.get() == "manual":
@@ -415,6 +488,17 @@ class App:
         else:
             self.x_entry.config(state=tk.DISABLED)
             self.y_entry.config(state=tk.DISABLED)
+
+    def on_control_configure(self, event):
+        self.control_canvas.configure(scrollregion=self.control_canvas.bbox("all"))
+
+    def on_control_canvas_configure(self, event):
+        self.control_canvas.itemconfig(self.control_window, width=event.width)
+
+    def on_mousewheel(self, event):
+        if self.control_canvas.winfo_containing(event.x_root, event.y_root) is None:
+            return
+        self.control_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def arrange_nodes_automatically(self):
         """Redistribuye todos los nodos automáticos en una formación circular."""
@@ -535,6 +619,32 @@ class App:
         self.edge2_entry.delete(0, tk.END)
         self.weight_entry.delete(0, tk.END)
         self.weight_entry.insert(0, "1")
+
+    # =========================
+    # ELIMINAR NODO
+    # =========================
+    def delete_node(self):
+        node = self.delete_entry.get().strip()
+        if not node:
+            messagebox.showerror("Error", "Debe indicar el nodo a eliminar.")
+            return
+        if not node.isdigit():
+            messagebox.showerror(
+                "Error", "El nombre del nodo debe ser un número entero."
+            )
+            return
+
+        result = self.graph.delete_node(node)
+        if result == "missing":
+            messagebox.showerror("Error", "El nodo no existe.")
+            return
+
+        if self.placement_mode.get() == "auto":
+            self.arrange_nodes_automatically()
+
+        self.visualizer.draw()
+        self.clear_steps()
+        self.delete_entry.delete(0, tk.END)
 
     # =========================
     # RESETEAR
@@ -670,6 +780,7 @@ class App:
             active_edges=step.get("active_edges"),
             selected_edges=step.get("selected_edges"),
             pointers=step.get("pointers"),
+            result_nodes=step.get("result_nodes"),
         )
         desc = step.get("desc", "")
         self.status_label.config(text=f"Paso {index + 1}/{len(self.steps)}: {desc}")
@@ -884,9 +995,15 @@ class App:
 
         output = "\n".join(["Floyd (distancias)", "", self.format_matrix(dist, nodes)])
 
+        end = self.end_entry.get().strip()
+        result_nodes = set()
+        if end and end in index:
+            result_nodes.add(end)
+
         steps.append(
             {
                 "desc": "Resultado final de Floyd",
+                "result_nodes": result_nodes,
                 "output": output,
             }
         )
@@ -1050,9 +1167,17 @@ class App:
         output = "\n".join(
             ["Warshall (alcanzabilidad)", "", self.format_matrix(reach, nodes)]
         )
+        start = self.start_entry.get().strip()
+        end = self.end_entry.get().strip()
+        result_nodes = set()
+        if start in index and end in index:
+            if reach[index[start]][index[end]]:
+                result_nodes.add(end)
+
         steps.append(
             {
                 "desc": "Resultado final de Warshall",
+                "result_nodes": result_nodes,
                 "output": output,
             }
         )
